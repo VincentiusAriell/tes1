@@ -4,7 +4,7 @@ include __DIR__ . '/../config/config.php';
 checkLogin();
 
 $user_id = $_SESSION['user_id'];
-$users = $conn->query("SELECT * FROM users WHERE id != '$user_id'");
+
 $sql = "
     SELECT c.id AS conversation_id,
            IF(c.user_one = ?, c.user_two, c.user_one) AS other_user_id,
@@ -33,10 +33,56 @@ $result = $stmt->get_result();
 <head>
     <title>Daftar Chat</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <style>
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .header a {
+            margin-left: 10px;
+            text-decoration: none;
+            background-color: #3498db;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 5px;
+        }
+        .header a.logout {
+            background-color: #e74c3c;
+        }
+        .chat-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .chat-item:hover {
+            background-color: #f5f5f5;
+        }
+        .chat-item img {
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .chat-info {
+            flex: 1;
+        }
+        .time {
+            font-size: 0.85em;
+            color: gray;
+        }
+    </style>
 </head>
 <body>
-<h2>Daftar Chat</h2>
-<p>Halo, <?php echo htmlspecialchars($_SESSION['name']); ?>!</p>
+<div class="header">
+    <h2>Daftar Chat</h2>
+    <div>
+        <span>Halo, <?php echo htmlspecialchars($_SESSION['name']); ?>!</span>
+        <a href="edit_profile.php">Edit Profil</a>
+        <a href="logout.php" class="logout">Logout</a>
+    </div>
+</div>
 
 <div class="chat-list">
 <?php if ($result->num_rows > 0): ?>
@@ -61,8 +107,5 @@ $result = $stmt->get_result();
     <p>Tidak ada percakapan.</p>
 <?php endif; ?>
 </div>
-
-<p><a href="logout.php">Logout</a></p>
 </body>
 </html>
-
