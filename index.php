@@ -9,7 +9,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $result = $conn->query("SELECT * FROM users WHERE username='$username'");
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
-        if (password_verify($password, $row['password'])) {
+        // First try default PHP password hashing verification (e.g., bcrypt)
+        $isValid = password_verify($password, $row['password']);
+
+        // If that fails, fall back to Whirlpool hash comparison (expects DB to store Whirlpool hex)
+        if (!$isValid) {
+            $whirlpoolHash = hash('whirlpool', $password);
+            $isValid = hash_equals($row['password'], $whirlpoolHash);
+        }
+
+        if ($isValid) {
             $_SESSION['user_id'] = $row['id'];
             header("Location: chatlist.php");
             exit();

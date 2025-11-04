@@ -1,5 +1,7 @@
 <?php
-include 'functions.php';
+include 'config.php';
+include 'encryption.php';
+include 'function.php';
 checkLogin();
 
 $user_id = $_SESSION['user_id'];
@@ -7,14 +9,27 @@ $to_id = $_GET['to'];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $message = $_POST['message'];
-    $conn->query("INSERT INTO messages (sender_id, receiver_id, message) VALUES ('$user_id', '$to_id', '$message')");
+    
+    // Encrypt message using super encryption (Caesar + RC4 + AES)
+    $encryptedMessage = superEncrypt($message);
+    
+    // Use prepared statement to prevent SQL injection
+    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $user_id, $to_id, $encryptedMessage);
+    $stmt->execute();
+    $stmt->close();
 }
 
 $chatUser = getUser($to_id);
-$messages = $conn->query("SELECT * FROM messages WHERE 
-    (sender_id='$user_id' AND receiver_id='$to_id') OR 
-    (sender_id='$to_id' AND receiver_id='$user_id')
+
+// Use prepared statement to prevent SQL injection
+$stmt = $conn->prepare("SELECT * FROM messages WHERE 
+    (sender_id=? AND receiver_id=?) OR 
+    (sender_id=? AND receiver_id=?)
     ORDER BY created_at ASC");
+$stmt->bind_param("iiii", $user_id, $to_id, $to_id, $user_id);
+$stmt->execute();
+$messages = $stmt->get_result();
 ?>
 <!DOCTYPE html>
 <html>
@@ -27,7 +42,11 @@ $messages = $conn->query("SELECT * FROM messages WHERE
 
 <div class="chat-box">
     <?php while($msg = $messages->fetch_assoc()): ?>
-        <p><b><?= getUser($msg['sender_id'])['username']; ?>:</b> <?= htmlspecialchars($msg['message']); ?></p>
+        <?php 
+        // Decrypt message using super decryption (AES -> RC4 -> Caesar)
+        $decryptedMessage = superDecrypt($msg['message']);
+        ?>
+        <p><b><?= getUser($msg['sender_id'])['username']; ?>:</b> <?= htmlspecialchars($decryptedMessage); ?></p>
     <?php endwhile; ?>
 </div>
 
