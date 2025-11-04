@@ -1,17 +1,6 @@
 <?php
-declare(strict_types=1);
-
-require __DIR__ . '/config.php';
-
-$_SESSION = [];
-if (ini_get('session.use_cookies')) {
-	$params = session_get_cookie_params();
-	setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
-}
+session_start();
 session_destroy();
-
-redirect('login.php');
-
+header("Location: index.php");
+exit();
 ?>
-
-
