@@ -5,6 +5,48 @@ checkLogin();
 
 $user_id = $_SESSION['user_id'];
 
+// Jika user mengirim form email untuk mulai chat
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['email'])) {
+    $email = trim($_POST['email']);
+
+    // Cek apakah email ada di database
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+    $stmt->bind_param("si", $email, $user_id);
+    $stmt->execute();
+    $stmt->store_result();
+
+    if ($stmt->num_rows > 0) {
+        $stmt->bind_result($other_user_id);
+        $stmt->fetch();
+
+        // Cek apakah percakapan sudah ada
+        $check = $conn->prepare("
+            SELECT id FROM conversations 
+            WHERE (user_one = ? AND user_two = ?) OR (user_one = ? AND user_two = ?)
+        ");
+        $check->bind_param("iiii", $user_id, $other_user_id, $other_user_id, $user_id);
+        $check->execute();
+        $check->store_result();
+
+        if ($check->num_rows > 0) {
+            $check->bind_result($conversation_id);
+            $check->fetch();
+        } else {
+            // Buat percakapan baru
+            $insert = $conn->prepare("INSERT INTO conversations (user_one, user_two) VALUES (?, ?)");
+            $insert->bind_param("ii", $user_id, $other_user_id);
+            $insert->execute();
+            $conversation_id = $insert->insert_id;
+        }
+
+        // Redirect ke halaman chat
+        header("Location: chat.php?conversation_id=" . $conversation_id);
+        exit();
+    } else {
+        $error_message = "Email tidak ditemukan.";
+    }
+}
+
 $sql = "
     SELECT c.id AS conversation_id,
            IF(c.user_one = ?, c.user_two, c.user_one) AS other_user_id,
@@ -34,6 +76,9 @@ $result = $stmt->get_result();
     <title>Daftar Chat</title>
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
         .header {
             display: flex;
             justify-content: space-between;
@@ -72,6 +117,51 @@ $result = $stmt->get_result();
             font-size: 0.85em;
             color: gray;
         }
+        .new-chat-btn {
+            display: inline-block;
+            background-color: #2ecc71;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-bottom: 10px;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .popup-content {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            width: 300px;
+        }
+        .popup-content input[type="email"] {
+            width: 90%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        .popup-content button {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+        .popup-content .cancel {
+            background-color: #e74c3c;
+        }
+        .error {
+            color: red;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -83,6 +173,12 @@ $result = $stmt->get_result();
         <a href="logout.php" class="logout">Logout</a>
     </div>
 </div>
+
+<a href="#" class="new-chat-btn" onclick="openPopup()">Mulai Chat</a>
+
+<?php if (!empty($error_message)): ?>
+    <div class="error"><?php echo htmlspecialchars($error_message); ?></div>
+<?php endif; ?>
 
 <div class="chat-list">
 <?php if ($result->num_rows > 0): ?>
@@ -107,5 +203,26 @@ $result = $stmt->get_result();
     <p>Tidak ada percakapan.</p>
 <?php endif; ?>
 </div>
+
+<div class="popup" id="popupForm">
+    <div class="popup-content">
+        <h3>Mulai Chat Baru</h3>
+        <form method="POST">
+            <input type="email" name="email" placeholder="Masukkan email pengguna" required>
+            <br>
+            <button type="submit">Mulai</button>
+            <button type="button" class="cancel" onclick="closePopup()">Batal</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function openPopup() {
+    document.getElementById("popupForm").style.display = "flex";
+}
+function closePopup() {
+    document.getElementById("popupForm").style.display = "none";
+}
+</script>
 </body>
 </html>
