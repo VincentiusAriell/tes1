@@ -1,6 +1,7 @@
 <?php
-include __DIR__ . '/../app/functions.php';
 include __DIR__ . '/../config/config.php';
+include __DIR__ . '/../app/functions.php';
+
 checkLogin();
 
 $user_id = $_SESSION['user_id'];
@@ -35,7 +36,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Upload file
     if (!empty($_FILES['file']['name'])) {
-        $file_name = time() . "_" . basename($_FILES['file']['name']);
+        $original_name = pathinfo($_FILES['file']['name'], PATHINFO_FILENAME);
+        $extension = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+
+        // Enkripsi nama file pakai Camellia
+        $encrypted_name = encryptFilenameCamellia($original_name);
+
+        // Gabungkan kembali nama terenkripsi + ekstensi
+        $file_name = $encrypted_name . "." . $extension;
+
         $target_dir = __DIR__ . "/uploads/";
         $target_file = $target_dir . $file_name;
         $file_type = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
@@ -52,11 +61,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
+    $enc_meta = null;
+    if (!empty($message)) {
+        $enc = superEncrypt($message);
+        $message = $enc['text'];
+        $enc_meta = $enc['meta'];
+    }
+
     $stmt = $conn->prepare("
-        INSERT INTO messages (conversation_id, sender_id, receiver_id, message_type, message_text, file_path, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, NOW())
+        INSERT INTO messages (conversation_id, sender_id, receiver_id, message_type, message_text, file_path, encryption_key, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
     ");
-    $stmt->bind_param("iiisss", $conversation_id, $user_id, $other_user_id, $message_type, $message, $file_path);
+    $stmt->bind_param("iiissss", $conversation_id, $user_id, $other_user_id, $message_type, $message, $file_path, $enc_meta);
     $stmt->execute();
 
     header("Location: chat.php?conversation_id=" . $conversation_id);
@@ -122,12 +138,26 @@ $messages = $stmt->get_result();
                 ?>
                 <div class="file-preview">
                     <img src="<?= $file_icon ?>" class="icon" alt="file icon">
-                    <a href="<?= htmlspecialchars($msg['file_path']); ?>" download><?= basename($msg['file_path']); ?></a>
+                    <?php 
+                        $encrypted_name = pathinfo($msg['file_path'], PATHINFO_FILENAME);
+                        $extension = pathinfo($msg['file_path'], PATHINFO_EXTENSION);
+                        $decrypted_name = decryptFilenameCamellia($encrypted_name);
+                    ?>
+                    <a href="<?= htmlspecialchars($msg['file_path']); ?>" download="<?= htmlspecialchars($decrypted_name . '.' . $extension); ?>">
+                        <?= htmlspecialchars($decrypted_name . '.' . $extension); ?>
+                    </a>
+
                 </div>
             <?php endif; ?>
 
             <?php if (!empty($msg['message_text'])): ?>
-                <div><?= htmlspecialchars($msg['message_text']); ?></div>
+                <?php 
+                    $displayText = $msg['message_text'];
+                    if (!empty($msg['encryption_key'])) {
+                        $displayText = superDecrypt($msg['message_text'], $msg['encryption_key']);
+                    }
+                ?>
+                <div><?= htmlspecialchars($displayText); ?></div>
             <?php endif; ?>
 
             <small style="font-size: 0.8em; color: gray;"><?= date('H:i', strtotime($msg['created_at'])); ?></small>
