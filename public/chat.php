@@ -55,6 +55,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $file_path = "uploads/" . $file_name;
             if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
                 $message_type = 'image';
+                if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
+                    $message_type = 'image';
+
+                    // Jika user juga mengetik pesan teks
+                    // if (!empty($_POST['message'])) {
+                    //     $hidden_message = $_POST['message'];
+
+                    //     // Jalankan LSB embed
+                    //     $stego_path = $target_dir . "stego_" . $file_name;
+                    //     lsbEmbed($target_file, $hidden_message, $stego_path);
+
+                    //     // Ganti file asli dengan hasil steganografi
+                    //     rename($stego_path, $target_file);
+
+                    //     // Kosongkan pesan agar tidak disimpan dua kali
+                    //     $message = '';
+                    // }
+                }
+
             } else {
                 $message_type = 'file';
             }
@@ -125,7 +144,14 @@ $messages = $stmt->get_result();
         <div class="msg <?= $msg['sender_id'] == $user_id ? 'me' : 'other'; ?>">
             <strong><?= htmlspecialchars($msg['name']); ?>:</strong><br>
 
-            <?php if ($msg['message_type'] == 'image' && $msg['file_path']): ?>
+            <?php if ($msg['message_type'] == 'image' && $msg['file_path']): 
+                // $hidden_text = lsbExtract($msg['file_path']);
+                // if (!empty($hidden_text)) {
+                //     echo "<div style='font-size: 0.9em; color: #555; margin-top: 5px;'>
+                //             Pesan tersembunyi: " . htmlspecialchars($hidden_text) . "
+                //         </div>";
+                // }
+            ?>
                 <img src="<?= htmlspecialchars($msg['file_path']); ?>" class="chat-img" alt="Gambar">
 
             <?php elseif ($msg['message_type'] == 'file' && $msg['file_path']): ?>
