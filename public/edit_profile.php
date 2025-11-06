@@ -1,6 +1,7 @@
 <?php
 session_start();
 include __DIR__ . '/../config/config.php';
+include __DIR__ . '/../app/functions.php';
 
 // Cek login
 if (!isset($_SESSION['user_id'])) {
@@ -16,6 +17,11 @@ $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $user = $result->fetch_assoc();
+
+// Dekripsi name dari database untuk ditampilkan
+if ($user && isset($user['name'])) {
+    $user['name'] = superDecryptDB($user['name']);
+}
 ?>
 <!DOCTYPE html>
 <html>

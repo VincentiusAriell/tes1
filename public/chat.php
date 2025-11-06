@@ -26,6 +26,11 @@ if (!$chat) {
     die("Percakapan tidak ditemukan.");
 }
 
+// Dekripsi name untuk ditampilkan
+if (isset($chat['other_user_name'])) {
+    $chat['other_user_name'] = superDecryptDB($chat['other_user_name']);
+}
+
 $other_user_id = $chat['other_user_id'];
 
 // Kirim pesan
@@ -39,11 +44,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $original_name = pathinfo($_FILES['file']['name'], PATHINFO_FILENAME);
         $extension = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
 
-        // Enkripsi nama file pakai Camellia
-        $encrypted_name = encryptFilenameCamellia($original_name);
-
-        // Gabungkan kembali nama terenkripsi + ekstensi
-        $file_name = $encrypted_name . "." . $extension;
+        // Gunakan nama file asli
+        $file_name = $original_name . "." . $extension;
 
         $target_dir = __DIR__ . "/uploads/";
         $target_file = $target_dir . $file_name;
@@ -52,33 +54,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
 
         if (move_uploaded_file($_FILES['file']['tmp_name'], $target_file)) {
-            $file_path = "uploads/" . $file_name;
-            if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
-                $message_type = 'image';
+            // Enkripsi ke file sementara, lalu ganti file asli
+            $temp_enc = $target_dir . "enc_" . $file_name;
+            if (encryptFileCamellia($target_file, $temp_enc)) {
+                unlink($target_file); // hapus file asli
+                rename($temp_enc, $target_file); // ubah nama file terenkripsi
+                $file_path = "uploads/" . $file_name;
+
                 if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
                     $message_type = 'image';
-
-                    // Jika user juga mengetik pesan teks
-                    // if (!empty($_POST['message'])) {
-                    //     $hidden_message = $_POST['message'];
-
-                    //     // Jalankan LSB embed
-                    //     $stego_path = $target_dir . "stego_" . $file_name;
-                    //     lsbEmbed($target_file, $hidden_message, $stego_path);
-
-                    //     // Ganti file asli dengan hasil steganografi
-                    //     rename($stego_path, $target_file);
-
-                    //     // Kosongkan pesan agar tidak disimpan dua kali
-                    //     $message = '';
-                    // }
+                } else {
+                    $message_type = 'file';
                 }
-
-            } else {
-                $message_type = 'file';
             }
         }
     }
+
 
     $enc_meta = null;
     if (!empty($message)) {
@@ -108,7 +99,16 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("i", $conversation_id);
 $stmt->execute();
-$messages = $stmt->get_result();
+$messages_result = $stmt->get_result();
+
+// Dekripsi name untuk setiap pesan
+$messages = [];
+while ($msg = $messages_result->fetch_assoc()) {
+    if (isset($msg['name'])) {
+        $msg['name'] = superDecryptDB($msg['name']);
+    }
+    $messages[] = $msg;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -140,7 +140,7 @@ $messages = $stmt->get_result();
 </div>
 
 <div class="chat-box" id="chat-box">
-    <?php while ($msg = $messages->fetch_assoc()): ?>
+    <?php foreach ($messages as $msg): ?>
         <div class="msg <?= $msg['sender_id'] == $user_id ? 'me' : 'other'; ?>">
             <strong><?= htmlspecialchars($msg['name']); ?>:</strong><br>
 
@@ -164,16 +164,11 @@ $messages = $stmt->get_result();
                 ?>
                 <div class="file-preview">
                     <img src="<?= $file_icon ?>" class="icon" alt="file icon">
-                    <?php 
-                        $encrypted_name = pathinfo($msg['file_path'], PATHINFO_FILENAME);
-                        $extension = pathinfo($msg['file_path'], PATHINFO_EXTENSION);
-                        $decrypted_name = decryptFilenameCamellia($encrypted_name);
-                    ?>
-                    <a href="<?= htmlspecialchars($msg['file_path']); ?>" download="<?= htmlspecialchars($decrypted_name . '.' . $extension); ?>">
-                        <?= htmlspecialchars($decrypted_name . '.' . $extension); ?>
+                    <a href="download.php?file=<?= urlencode($msg['file_path']); ?>">
+                        <?= htmlspecialchars(basename($msg['file_path'])); ?>
                     </a>
-
                 </div>
+
             <?php endif; ?>
 
             <?php if (!empty($msg['message_text'])): ?>
@@ -188,7 +183,7 @@ $messages = $stmt->get_result();
 
             <small style="font-size: 0.8em; color: gray;"><?= date('H:i', strtotime($msg['created_at'])); ?></small>
         </div>
-    <?php endwhile; ?>
+    <?php endforeach; ?>
 </div>
 
 <form method="post" enctype="multipart/form-data">

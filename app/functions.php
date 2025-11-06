@@ -3,6 +3,7 @@ session_start();
 include __DIR__ . '/../config/config.php';
 
 
+
 function checkLogin() {
     if (!isset($_SESSION['user_id'])) {
         header("Location: index.php");
@@ -14,7 +15,12 @@ function checkLogin() {
 function getUser($id) {
     global $conn;
     $result = $conn->query("SELECT * FROM users WHERE id='$id'");
-    return $result->fetch_assoc();
+    $user = $result->fetch_assoc();
+    if ($user && isset($user['name'])) {
+        // Decrypt name from database for display
+        $user['name'] = superDecryptDB($user['name']);
+    }
+    return $user;
 }
 
 // Encryption helpers: Caesar -> RC4 -> AES (encrypt) and reverse for decrypt
@@ -40,6 +46,48 @@ function caesarEncrypt($text, $shift) {
 
 function caesarDecrypt($text, $shift) {
     return caesarEncrypt($text, 26 - ((int)$shift % 26));
+}
+
+// Super encryption functions (AES-256-CBC + Camellia-256-CBC)
+function superEncryptDB($plaintext) {
+    // Generate random keys and IVs
+    $aes_key = openssl_random_pseudo_bytes(32); // 256 bits
+    $camellia_key = openssl_random_pseudo_bytes(32); // 256 bits
+    $aes_iv = openssl_random_pseudo_bytes(16);
+    $camellia_iv = openssl_random_pseudo_bytes(16);
+    
+    // First layer: AES-256-CBC
+    $aes_encrypted = openssl_encrypt($plaintext, 'aes-256-cbc', $aes_key, OPENSSL_RAW_DATA, $aes_iv);
+    
+    // Second layer: Camellia-256-CBC
+    $camellia_encrypted = openssl_encrypt($aes_encrypted, 'camellia-256-cbc', $camellia_key, OPENSSL_RAW_DATA, $camellia_iv);
+    
+    // Combine all components for storage
+    $combined = base64_encode($aes_key . $camellia_key . $aes_iv . $camellia_iv . $camellia_encrypted);
+    
+    return $combined;
+}
+
+function superDecryptDB($encrypted) {
+    if (empty($encrypted)) return '';
+    
+    // Decode the combined string
+    $decoded = base64_decode($encrypted);
+    
+    // Extract components
+    $aes_key = substr($decoded, 0, 32);
+    $camellia_key = substr($decoded, 32, 32);
+    $aes_iv = substr($decoded, 64, 16);
+    $camellia_iv = substr($decoded, 80, 16);
+    $encrypted_data = substr($decoded, 96);
+    
+    // First layer: Decrypt Camellia
+    $aes_encrypted = openssl_decrypt($encrypted_data, 'camellia-256-cbc', $camellia_key, OPENSSL_RAW_DATA, $camellia_iv);
+    
+    // Second layer: Decrypt AES
+    $decrypted = openssl_decrypt($aes_encrypted, 'aes-256-cbc', $aes_key, OPENSSL_RAW_DATA, $aes_iv);
+    
+    return $decrypted;
 }
 
 function rc4Stream($key, $data) {
@@ -87,18 +135,6 @@ function aesDecrypt($cipherB64, $ivB64, $key) {
     return $plaintext === false ? '' : $plaintext;
 }
 
-function twofishEncrypt($plainText, $key) {
-    if ($plainText === null || $plainText === '') return $plainText;
-    $cipher = openssl_encrypt($plainText, 'BF-CBC', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
-    return base64_encode($cipher);
-}
-
-function twofishDecrypt($cipherB64, $key) {
-    if (!$cipherB64) return '';
-    $cipher = base64_decode($cipherB64);
-    $plainText = openssl_decrypt($cipher, 'BF-CBC', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
-    return $plainText === false ? '' : $plainText;
-}
 
 function superEncrypt($plainText) {
     global $APP_AES, $APP_RC4_KEY, $APP_CAESAR_SHIFT;
@@ -121,36 +157,47 @@ function superDecrypt($cipherText, $metaJson) {
     return $plain;
 }
 
-function base64url_encode($data) {
-    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+function encryptFileCamellia($inputPath, $outputPath) {
+    global $APP_AES; // gunakan kunci rahasia dari config
+    if (!file_exists($inputPath)) return false;
+
+    $method = 'camellia-256-cbc';
+    $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length($method));
+    $key = hash('sha256', $APP_AES, true);
+
+    $data = file_get_contents($inputPath);
+    if ($data === false) return false;
+
+    $encrypted = openssl_encrypt($data, $method, $key, OPENSSL_RAW_DATA, $iv);
+    if ($encrypted === false) return false;
+
+    // Gabungkan IV + data terenkripsi
+    file_put_contents($outputPath, $iv . $encrypted);
+
+    return true;
 }
 
-function base64url_decode($data) {
-    return base64_decode(strtr($data, '-_', '+/'));
+function decryptFileCamellia($inputPath, $outputPath) {
+    global $APP_AES;
+    if (!file_exists($inputPath)) return false;
+
+    $method = 'camellia-256-cbc';
+    $key = hash('sha256', $APP_AES, true);
+    $ivLength = openssl_cipher_iv_length($method);
+
+    $data = file_get_contents($inputPath);
+    if ($data === false || strlen($data) <= $ivLength) return false;
+
+    $iv = substr($data, 0, $ivLength);
+    $encryptedData = substr($data, $ivLength);
+
+    $decrypted = openssl_decrypt($encryptedData, $method, $key, OPENSSL_RAW_DATA, $iv);
+    if ($decrypted === false) return false;
+
+    file_put_contents($outputPath, $decrypted);
+    return true;
 }
 
-function encryptFilenameCamellia($filename) {
-    $key = hash('sha256', 'kunci_rahasia_nama_file_camellia', true);
-    $iv = random_bytes(16);
-    $ciphertext = openssl_encrypt($filename, 'camellia-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-    // Gunakan base64url agar tidak ada karakter aneh
-    return base64url_encode($iv . $ciphertext);
-}
-
-function decryptFilenameCamellia($encrypted) {
-    $key = hash('sha256', 'kunci_rahasia_nama_file_camellia', true);
-    $data = base64url_decode($encrypted);
-
-    // Pastikan panjang minimal cukup untuk IV
-    if (strlen($data) < 16) {
-        return 'invalid_data';
-    }
-
-    $iv = substr($data, 0, 16);
-    $ciphertext = substr($data, 16);
-    $decrypted = openssl_decrypt($ciphertext, 'camellia-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-    return $decrypted !== false ? $decrypted : 'unknown_file';
-}
 
 
 

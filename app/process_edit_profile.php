@@ -1,6 +1,7 @@
 <?php
 session_start();
 include __DIR__ . '/../config/config.php';
+include __DIR__ . '/../app/functions.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../public/index.php");
@@ -38,12 +39,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    // Update ke database
+    // Enkripsi name sebelum disimpan ke database
+    $name_encrypted = superEncryptDB($name);
+    
+    // Update ke database (name terenkripsi di database)
     $update = $conn->prepare("UPDATE users SET name = ?, status = ?, profile_picture = ? WHERE id = ?");
-    $update->bind_param("sssi", $name, $status, $profile_picture, $user_id);
+    $update->bind_param("sssi", $name_encrypted, $status, $profile_picture, $user_id);
 
     if ($update->execute()) {
-        $_SESSION['name'] = $name;
+        // Store the original name in session since it's already decrypted
+        $_SESSION['name'] = $name;  // Name is already in plaintext here
         header("Location: ../public/chats.php?updated=1");
         exit();
     } else {

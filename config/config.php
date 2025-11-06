@@ -2,7 +2,7 @@
 $host = "localhost";
 $user = "root";
 $pass = "";
-$dbname = "kripton2";
+$dbname = "kripton3";
 
 $conn = new mysqli($host, $user, $pass, $dbname);
 
@@ -15,7 +15,4 @@ $APP_RC4_KEY = getenv('APP_RC4_KEY') ?: 'rc4key-9F7hD3pQwT8rX2vZ';
 $APP_CAESAR_SHIFT = (int)(getenv('APP_CAESAR_SHIFT') ?: 7);
 $APP_TWOFISH_KEY = getenv('APP_TWOFISH_KEY') ?: 'twofishK3y_M9rT7pQ1bL5nD8';
 
-
 ?>
-
-

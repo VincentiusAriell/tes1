@@ -1,6 +1,7 @@
 <?php
 session_start();
 include __DIR__ . '/../../config/config.php';
+include __DIR__ . '/../../app/functions.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email']);
@@ -21,12 +22,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         if ($isValid) {
+            // Dekripsi name dari database untuk ditampilkan di web
+            $name_decrypted = superDecryptDB($row['name']);
+            
             $update = $conn->prepare("UPDATE users SET last_seen = NOW(), status = 'Online' WHERE id = ?");
             $update->bind_param("i", $row['id']);
             $update->execute();
 
             $_SESSION['user_id'] = $row['id'];
-            $_SESSION['name'] = $row['name'];
+            $_SESSION['name'] = $name_decrypted; // Simpan nama yang sudah didekripsi di session
             $_SESSION['email'] = $row['email'];
 
             header("Location: ../../public/chats.php");
