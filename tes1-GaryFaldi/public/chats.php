@@ -5,6 +5,17 @@ checkLogin();
 
 $user_id = $_SESSION['user_id'];
 
+// Get current user's name from database and make sure it's decrypted
+$stmt = $conn->prepare("SELECT name FROM users WHERE id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
+
+if ($user && isset($user['name'])) {
+    $_SESSION['name'] = superDecryptDB($user['name']); // Refresh session name with decrypted value
+}
+
 // Jika user mengirim form email untuk mulai chat
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['email'])) {
     $email = trim($_POST['email']);
@@ -54,7 +65,8 @@ $sql = "
            u.profile_picture,
            m.message_text,
            m.message_type,
-           m.created_at
+           m.created_at,
+           m.encryption_key
     FROM conversations c
     JOIN users u ON u.id = IF(c.user_one = ?, c.user_two, c.user_one)
     LEFT JOIN messages m ON m.id = (
@@ -188,6 +200,12 @@ while ($row = $result->fetch_assoc()) {
     if (isset($row['other_user_name'])) {
         $row['other_user_name'] = superDecryptDB($row['other_user_name']);
     }
+    
+    // Dekripsi pesan preview jika ada
+    if (!empty($row['message_text']) && !empty($row['encryption_key'])) {
+        $row['message_text'] = superDecrypt($row['message_text'], $row['encryption_key']);
+    }
+    
     $rows[] = $row;
 }
 if (count($rows) > 0): ?>

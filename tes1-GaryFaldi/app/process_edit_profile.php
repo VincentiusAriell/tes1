@@ -47,7 +47,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $update->bind_param("sssi", $name_encrypted, $status, $profile_picture, $user_id);
 
     if ($update->execute()) {
-        $_SESSION['name'] = $name; // Simpan nama asli (belum terenkripsi) di session
+        // Store the original name in session since it's already decrypted
+        $_SESSION['name'] = $name;  // Name is already in plaintext here
         header("Location: ../public/chats.php?updated=1");
         exit();
     } else {
