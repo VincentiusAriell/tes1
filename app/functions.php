@@ -198,6 +198,71 @@ function decryptFileCamellia($inputPath, $outputPath) {
     return true;
 }
 
+function lsbEmbed($imagePath, $message) {
+    if (!file_exists($imagePath)) return false;
+    $img = imagecreatefromstring(file_get_contents($imagePath));
+    if (!$img) return false;
+
+    $message .= "\0"; // penanda akhir pesan
+    $msgBin = '';
+    for ($i = 0; $i < strlen($message); $i++) {
+        $msgBin .= str_pad(decbin(ord($message[$i])), 8, '0', STR_PAD_LEFT);
+    }
+
+    $width = imagesx($img);
+    $height = imagesy($img);
+    $msgIndex = 0;
+    $msgLength = strlen($msgBin);
+
+    for ($y = 0; $y < $height; $y++) {
+        for ($x = 0; $x < $width; $x++) {
+            if ($msgIndex >= $msgLength) break 2;
+            $rgb = imagecolorat($img, $x, $y);
+            $r = ($rgb >> 16) & 0xFF;
+            $g = ($rgb >> 8) & 0xFF;
+            $b = $rgb & 0xFF;
+
+            $b = ($b & 0xFE) | (int)$msgBin[$msgIndex];
+            $msgIndex++;
+
+            $color = imagecolorallocate($img, $r, $g, $b);
+            imagesetpixel($img, $x, $y, $color);
+        }
+    }
+
+    imagepng($img, $imagePath); // simpan ulang gambar
+    imagedestroy($img);
+    return true;
+}
+
+function lsbExtract($imagePath) {
+    if (!file_exists($imagePath)) return '';
+    $img = imagecreatefromstring(file_get_contents($imagePath));
+    if (!$img) return '';
+
+    $width = imagesx($img);
+    $height = imagesy($img);
+    $binData = '';
+
+    for ($y = 0; $y < $height; $y++) {
+        for ($x = 0; $x < $width; $x++) {
+            $rgb = imagecolorat($img, $x, $y);
+            $b = $rgb & 0xFF;
+            $binData .= ($b & 1);
+        }
+    }
+
+    $chars = '';
+    for ($i = 0; $i < strlen($binData); $i += 8) {
+        $byte = substr($binData, $i, 8);
+        $char = chr(bindec($byte));
+        if ($char === "\0") break;
+        $chars .= $char;
+    }
+
+    imagedestroy($img);
+    return $chars;
+}
 
 
 

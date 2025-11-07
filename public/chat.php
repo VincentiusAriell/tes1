@@ -39,38 +39,52 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $message_type = 'text';
     $file_path = null;
 
-    // Upload file
-    if (!empty($_FILES['file']['name'])) {
+    // Tentukan form mana yang digunakan
+    $is_lsb_form = isset($_POST['lsb_upload']);
+
+    // Upload file dari form biasa (Camellia)
+    if (!$is_lsb_form && !empty($_FILES['file']['name'])) {
         $original_name = pathinfo($_FILES['file']['name'], PATHINFO_FILENAME);
         $extension = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
 
-        // Gunakan nama file asli
         $file_name = $original_name . "." . $extension;
-
         $target_dir = __DIR__ . "/uploads/";
         $target_file = $target_dir . $file_name;
-        $file_type = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
-
         if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
 
         if (move_uploaded_file($_FILES['file']['tmp_name'], $target_file)) {
-            // Enkripsi ke file sementara, lalu ganti file asli
             $temp_enc = $target_dir . "enc_" . $file_name;
             if (encryptFileCamellia($target_file, $temp_enc)) {
-                unlink($target_file); // hapus file asli
-                rename($temp_enc, $target_file); // ubah nama file terenkripsi
+                unlink($target_file);
+                rename($temp_enc, $target_file);
                 $file_path = "uploads/" . $file_name;
+                $message_type = 'file';
+            }
+        }
+    }
 
-                if (in_array($file_type, ['jpg', 'jpeg', 'png', 'gif'])) {
+    // Upload file dari form LSB (gambar)
+    if ($is_lsb_form && !empty($_FILES['lsb_image']['name'])) {
+        $original_name = pathinfo($_FILES['lsb_image']['name'], PATHINFO_FILENAME);
+        $extension = strtolower(pathinfo($_FILES['lsb_image']['name'], PATHINFO_EXTENSION));
+
+        $file_name = $original_name . "." . $extension;
+        $target_dir = __DIR__ . "/uploads/";
+        $target_file = $target_dir . $file_name;
+        if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
+
+        if (move_uploaded_file($_FILES['lsb_image']['tmp_name'], $target_file)) {
+            $pesan_rahasia = $_POST['secret_message'] ?? 'pesan rahasia';
+            if (in_array($extension, ['jpg', 'jpeg', 'png', 'gif'])) {
+                if (lsbEmbed($target_file, $pesan_rahasia)) {
+                    $file_path = "uploads/" . $file_name;
                     $message_type = 'image';
-                } else {
-                    $message_type = 'file';
                 }
             }
         }
     }
 
-
+    // Enkripsi teks biasa
     $enc_meta = null;
     if (!empty($message)) {
         $enc = superEncrypt($message);
@@ -88,6 +102,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header("Location: chat.php?conversation_id=" . $conversation_id);
     exit();
 }
+
 
 // Ambil semua pesan
 $stmt = $conn->prepare("
@@ -145,12 +160,12 @@ while ($msg = $messages_result->fetch_assoc()) {
             <strong><?= htmlspecialchars($msg['name']); ?>:</strong><br>
 
             <?php if ($msg['message_type'] == 'image' && $msg['file_path']): 
-                // $hidden_text = lsbExtract($msg['file_path']);
-                // if (!empty($hidden_text)) {
-                //     echo "<div style='font-size: 0.9em; color: #555; margin-top: 5px;'>
-                //             Pesan tersembunyi: " . htmlspecialchars($hidden_text) . "
-                //         </div>";
-                // }
+                $hidden_text = lsbExtract($msg['file_path']);
+                if (!empty($hidden_text)) {
+                    echo "<div style='font-size: 0.9em; color: #555; margin-top: 5px;'>
+                            Pesan tersembunyi: " . htmlspecialchars($hidden_text) . "
+                        </div>";
+                }
             ?>
                 <img src="<?= htmlspecialchars($msg['file_path']); ?>" class="chat-img" alt="Gambar">
 
@@ -186,10 +201,19 @@ while ($msg = $messages_result->fetch_assoc()) {
     <?php endforeach; ?>
 </div>
 
+<!-- Form 1: untuk kirim pesan biasa + file terenkripsi Camellia -->
 <form method="post" enctype="multipart/form-data">
     <input type="text" name="message" placeholder="Ketik pesan...">
-    <input type="file" name="file" accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.zip,.rar">
-    <button type="submit">Kirim</button>
+    <input type="file" name="file" accept=".pdf,.doc,.docx,.zip,.rar">
+    <button type="submit">Kirim File</button>
+</form>
+
+<!-- Form 2: untuk upload gambar yang disisipi pesan rahasia (LSB) -->
+<form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="lsb_upload" value="1">
+    <input type="file" name="lsb_image" accept=".jpg,.jpeg,.png,.gif" required>
+    <input type="text" name="secret_message" placeholder="Pesan rahasia di dalam gambar..." required>
+    <button type="submit">Kirim Gambar Rahasia</button>
 </form>
 
 <a href="chatlist.php" class="back-btn">Kembali</a>
